@@ -5,7 +5,7 @@ use clap::Parser;
 
 
 #[derive(Parser, Debug)]
-#[clap(name = "Proxy Checker", author = "Ariyan Eghbal <ariyan.eghbal@gmail.com>", version = "0.1.0", about = "Checks if proxyies work", long_about = None)]
+#[clap(name = "Proxy Checker", author = "Ariyan Eghbal <ariyan.eghbal@gmail.com>", version = "0.2.0", about = "Checks if proxyies work", long_about = None)]
 struct Args {
     #[clap(short = 'v', long = "verbose")]
     verbose: bool,
