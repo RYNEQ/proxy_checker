@@ -10,6 +10,8 @@ const COMMON_PROXY_PORTS:[&str;11] = ["1080","8080","9050","9051","8118","8123",
 struct Args {
     #[clap(short = 'v', long = "verbose")]
     verbose: bool,
+    #[clap(short = 'q', long = "quiet", help = "If the quiet mode be on, program only show the live proxies")]
+    quiet: bool,
     #[clap(short = 't', long = "timeout", default_value = "5")]
     timeout: u8,
     #[clap(short = 'T', long = "target", default_value = "https://www.google.com")]
@@ -116,7 +118,9 @@ async fn main() {
         f.read_to_string(&mut contents).expect("Could not read file");
         proxies = contents.split("\n").map(|x| x.to_string()).collect();
     }else{
-        println!("Please enter your proxy address, One at each line, Enter empty line when finished:\n(If no port specified program will test some common ports on that address)\n");
+        if !args.quiet{
+            println!("Please enter your proxy address, One at each line, Enter empty line when finished:\n(If no port specified program will test some common ports on that address)\n");
+        }
         
         let stdin = io::stdin();
         for line in stdin.lock().lines() {
@@ -142,7 +146,9 @@ async fn main() {
         }
     }
 
-    println!("Testing...\n");
+    if !args.quiet{
+        println!("Testing...\n");
+    }
 
     let tasks = proxies.into_iter().map(|p| {
         let target = args.target_site.clone();
@@ -172,17 +178,22 @@ async fn main() {
                         }
                     }
                 }
-                
-                if args.verbose {
-                    if success_count == 0{
-                        println!("{}: Not Worked",p_with_scheme);
-                    }else{
-                        println!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
-                    }
-                    
-                }else {
+                if args.quiet{
                     if success_count > 0{
-                        println!("{}: Worked", p_with_scheme);
+                        println!("{}",p_with_scheme);
+                    }
+                }else{
+                    if args.verbose {
+                        if success_count == 0{
+                            println!("{}: Not Worked",p_with_scheme);
+                        }else{
+                            println!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
+                        }
+                        
+                    }else {
+                        if success_count > 0{
+                            println!("{}: Worked", p_with_scheme);
+                        }
                     }
                 }
                 
