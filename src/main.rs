@@ -3,6 +3,7 @@ use std::{error::Error,slice::Iter,fs};
 use std::time::Duration;
 use clap::Parser;
 
+const COMMON_PROXY_PORTS:[&str;11] = ["1080","8080","9050","9051","8118","8123","8388","8580","8997","8998","8999"];
 
 #[derive(Parser, Debug)]
 #[clap(name = "Proxy Checker", author = "Ariyan Eghbal <ariyan.eghbal@gmail.com>", version = "0.4.0", about = "Checks if proxyies work", long_about = None)]
@@ -89,8 +90,21 @@ fn get_url_without_scheme(url: &String) -> String {
     url_without_scheme.to_string()
 }
 
+fn is_addr_has_port(url: &String) -> bool{
+    if url.contains(":"){
+        let splitted = url.split(":").last().unwrap();
+        if splitted.chars().all(|c| c.is_numeric()){
+            true
+        }else{
+            false
+        }
+    }else{
+        false
+    }
+}
 #[tokio::main]
 async fn main() {
+    
     let args = Args::parse();
 
 
@@ -104,7 +118,22 @@ async fn main() {
     }else{
         let stdin = io::stdin();
         for line in stdin.lock().lines() {
-            proxies.push(line.expect("Could not read line from standard in"));
+            // Get entered addr
+            let line_value = line.expect("Could not read line from standard in");
+            // The entered addr has port, just push into the proxies list
+            if is_addr_has_port(&line_value){
+                proxies.push(line_value)
+            }else{
+                // The entered addr hasn't specified port, so we select some common ports for that addr
+                // Add url with some common ports
+                for item in COMMON_PROXY_PORTS{
+                    if line_value.ends_with(":"){
+                        proxies.push(format!("{}{}",line_value,item));
+                    }else{
+                        proxies.push(format!("{}:{}",line_value,item));
+                    }
+                }
+            }
         }
     }
 
