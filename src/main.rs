@@ -6,7 +6,7 @@ use clap::Parser;
 const COMMON_PROXY_PORTS:[&str;11] = ["1080","8080","9050","9051","8118","8123","8388","8580","8997","8998","8999"];
 
 #[derive(Parser, Debug)]
-#[clap(name = "Proxy Checker", author = "Ariyan Eghbal <ariyan.eghbal@gmail.com>", version = "0.4.0", about = "Checks if proxyies work", long_about = None)]
+#[clap(name = "Proxy Checker", author = "Ariyan Eghbal <ariyan.eghbal@gmail.com>", version = "0.4.0", about = "Checks if proxies work", long_about = None)]
 struct Args {
     #[clap(short = 'v', long = "verbose")]
     verbose: bool,
