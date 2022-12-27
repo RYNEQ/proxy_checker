@@ -112,7 +112,7 @@ async fn main() {
 
     let mut proxies = vec![];
     if args.proxy_file.is_some() {
-        let file = args.proxy_file.unwrap();
+        let file = args.proxy_file.as_ref().unwrap();
         let mut f = fs::File::open(file).expect("File not found");
         let mut contents = String::new();
         f.read_to_string(&mut contents).expect("Could not read file");
@@ -147,7 +147,11 @@ async fn main() {
     }
 
     if !args.quiet{
-        println!("Testing...\n");
+        if args.proxy_file.is_some(){
+            println!("Testing proxies in the {} file...",args.proxy_file.unwrap())
+        }else{
+            println!("Testing...\n");
+        }
     }
 
     let tasks = proxies.into_iter().map(|p| {
