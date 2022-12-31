@@ -92,6 +92,15 @@ fn get_url_without_scheme(url: &String) -> String {
     url_without_scheme.to_string()
 }
 
+fn is_url_has_scheme(url: &String) -> bool{
+    for s in Scheme::iter(){
+        if url.starts_with(s.value()){
+            return true
+        }
+    }
+    false
+}
+
 fn is_addr_has_port(url: &String) -> bool{
     if url.contains(":"){
         let splitted = url.split(":").last().unwrap();
@@ -104,6 +113,22 @@ fn is_addr_has_port(url: &String) -> bool{
         false
     }
 }
+
+fn get_url_scheme(url: &String) -> Option<Scheme>{
+    if url.contains("://"){
+        let scheme_str = url.split("://").next().unwrap().to_string();
+        match scheme_str.as_str(){
+            "http" =>  Some(Scheme::Http),
+            "https" =>  Some(Scheme::Https),
+            "socks4" =>  Some(Scheme::Socks4),
+            "socks5" =>  Some(Scheme::Socks5),
+            _ => None,
+        }
+    }else{
+        None
+    }
+}
+
 #[tokio::main]
 async fn main() {
     
@@ -159,11 +184,12 @@ async fn main() {
         let check_str = args.check_str.clone();
         tokio::spawn(async move{
             let mut result_list = vec![];
-            for scheme in Scheme::iter() {
+            // If url has scheme, we don't need to check our schemes for that url, because it's already specified
+            if is_url_has_scheme(&p){
                 let mut success_count = 0;
-                let p_with_scheme = format!("{}://{}", scheme.value(), get_url_without_scheme(&p));
+                let scheme = &get_url_scheme(&p).unwrap();
                 for _ in 0..args.repeat {
-                    let res = check_proxy(&p_with_scheme, args.timeout, &target, &check_str).await;
+                    let res = check_proxy(&p, args.timeout, &target, &check_str).await;
                     match res {
                         Ok(res) => {
                             if res {
@@ -184,23 +210,65 @@ async fn main() {
                 }
                 if args.quiet{
                     if success_count > 0{
-                        println!("{}",p_with_scheme);
+                        println!("{}",p);
                     }
                 }else{
                     if args.verbose {
                         if success_count == 0{
-                            println!("{}: Not Worked",p_with_scheme);
+                            println!("{}: Not Worked",p);
                         }else{
-                            println!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
+                            println!("{}: {}/{} Worked",p,success_count,args.repeat);
                         }
                         
                     }else {
                         if success_count > 0{
-                            println!("{}: Worked", p_with_scheme);
+                            println!("{}: Worked", p);
                         }
                     }
                 }
-                
+            }else{
+                for scheme in Scheme::iter() {
+                    let mut success_count = 0;
+                    let p_with_scheme = format!("{}://{}", scheme.value(), get_url_without_scheme(&p));
+                    for _ in 0..args.repeat {
+                        let res = check_proxy(&p_with_scheme, args.timeout, &target, &check_str).await;
+                        match res {
+                            Ok(res) => {
+                                if res {
+                                    success_count += 1;
+                                    result_list.push((ProxyTestResult::Success, scheme));
+                                }else{
+                                    result_list.push((ProxyTestResult::TextNotFound, scheme));
+                                }
+                            },
+                            Err(e) => {
+                                if e.is_timeout(){ 
+                                    result_list.push((ProxyTestResult::Timeout, scheme));
+                                }else{
+                                    result_list.push((ProxyTestResult::Failure(e.source().unwrap().to_string()), scheme));
+                                }
+                            }
+                        }
+                    }
+                    if args.quiet{
+                        if success_count > 0{
+                            println!("{}",p_with_scheme);
+                        }
+                    }else{
+                        if args.verbose {
+                            if success_count == 0{
+                                println!("{}: Not Worked",p_with_scheme);
+                            }else{
+                                println!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
+                            }
+                            
+                        }else {
+                            if success_count > 0{
+                                println!("{}: Worked", p_with_scheme);
+                            }
+                        }
+                    }
+                }
             }
         })
     }).collect::<Vec<_>>();
