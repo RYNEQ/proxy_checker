@@ -12,6 +12,8 @@ struct Args {
     verbose: bool,
     #[clap(short = 'q', long = "quiet", help = "If the quiet mode be on, program only show the live proxies")]
     quiet: bool,
+    #[clap(short = 'l', long = "location", help = "If the location mode be on, program only show the location of the proxy")]
+    location: bool,
     #[clap(short = 't', long = "timeout", default_value = "5")]
     timeout: u8,
     #[clap(short = 'T', long = "target", default_value = "https://www.google.com")]
@@ -68,7 +70,6 @@ enum Scheme {
     Socks5,
 }
 
-
 impl Scheme {
     fn iter() -> Iter<'static, Scheme> {
         static SCHEMES: [Scheme; 4] = [Scheme::Http, 
@@ -101,7 +102,45 @@ fn is_url_has_scheme(url: &String) -> bool{
     false
 }
 
-fn is_addr_has_port(url: &String) -> bool{
+#[derive(Debug)]
+enum GetIpError{
+    ReqwestError,
+    ParsingError,
+    InvalidIp,
+}
+async fn get_ip_location(ip:&String) -> Result<String,GetIpError>{
+    if ip == ""{
+        return Err(GetIpError::InvalidIp)
+    }
+
+    let url = format!("http://ipwho.is/{}",ip);
+    // Get response
+    let res_text ={
+        match reqwest::Client::new().get(url).send().await{
+            Ok(res) => {
+                if let Err(_) = res.error_for_status_ref(){
+                    return Err(GetIpError::ReqwestError)
+                }
+                match res.text().await{
+                    Ok(v) => v,
+                    Err(_) => return Err(GetIpError::ReqwestError),
+                }
+            }
+            Err(_) => return Err(GetIpError::ReqwestError),
+        }
+    };
+  
+    // Parse response to json
+    let res_json :serde_json::Value = match serde_json::from_str(&res_text){
+        Ok(v) => v,
+        Err(_) => return Err(GetIpError::ParsingError),
+    };
+    // Make wanted result
+    
+    let ip_info: String = format!("{}/{}",res_json["country"].to_string().trim_matches('"'),res_json["city"].to_string().trim_matches('"'));
+    Ok(ip_info)
+}
+fn is_url_has_port(url: &String) -> bool{
     if url.contains(":"){
         let splitted = url.split(":").last().unwrap();
         if splitted.chars().all(|c| c.is_numeric()){
@@ -114,6 +153,14 @@ fn is_addr_has_port(url: &String) -> bool{
     }
 }
 
+fn get_url_without_port(url: &String) -> String{
+    if is_url_has_port(url){
+        if let Some(v) = url.split(':').next(){
+            return v.to_string()
+        }
+    }
+    return "".to_string()
+}
 fn get_url_scheme(url: &String) -> Option<Scheme>{
     if url.contains("://"){
         let scheme_str = url.split("://").next().unwrap().to_string();
@@ -131,7 +178,6 @@ fn get_url_scheme(url: &String) -> Option<Scheme>{
 
 #[tokio::main]
 async fn main() {
-    
     let args = Args::parse();
 
 
@@ -155,7 +201,7 @@ async fn main() {
                 break
             }
             // The entered addr has port, just push into the proxies list
-            if is_addr_has_port(&line_value){
+            if is_url_has_port(&line_value){
                 proxies.push(line_value)
             }else{
                 // The entered addr hasn't specified port, so we select some common ports for that addr
@@ -179,7 +225,7 @@ async fn main() {
         }
     }
 
-    let tasks = proxies.into_iter().map(|p| {
+    let tasks: Vec<_> = proxies.into_iter().map(|p| {
         let target = args.target_site.clone();
         let check_str = args.check_str.clone();
         tokio::spawn(async move{
@@ -208,23 +254,39 @@ async fn main() {
                         }
                     }
                 }
+                let mut msg: String = String::from("");
                 if args.quiet{
                     if success_count > 0{
-                        println!("{}",p);
+                        msg = format!("{}",&p);
                     }
                 }else{
                     if args.verbose {
                         if success_count == 0{
-                            println!("{}: Not Worked",p);
+                            println!("{}: Not Worked",&p);
+                            msg = format!("{}: Not Worked",&p);
                         }else{
-                            println!("{}: {}/{} Worked",p,success_count,args.repeat);
+                            msg = format!("{}: {}/{} Worked",&p,success_count,args.repeat);
+
                         }
                         
                     }else {
                         if success_count > 0{
-                            println!("{}: Worked", p);
+                            msg = format!("{}: Worked", &p);
                         }
                     }
+                    if args.location{
+                        if success_count > 0{
+                            if let Ok(proxy_loc) = get_ip_location(&get_url_without_port(&get_url_without_scheme(&p))).await{
+                                if proxy_loc != ""{
+                                    msg.push_str(&format!(" | {}",&proxy_loc));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if msg != ""{
+                    println!("{}", msg);
                 }
             }else{
                 for scheme in Scheme::iter() {
@@ -250,28 +312,44 @@ async fn main() {
                             }
                         }
                     }
+                    let mut msg: String = String::from("");
                     if args.quiet{
                         if success_count > 0{
-                            println!("{}",p_with_scheme);
+                            msg = format!("{}",p_with_scheme);
                         }
                     }else{
                         if args.verbose {
                             if success_count == 0{
                                 println!("{}: Not Worked",p_with_scheme);
+                                msg = format!("{}: Not Worked",p_with_scheme);
                             }else{
-                                println!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
+                                msg = format!("{}: {}/{} Worked",p_with_scheme,success_count,args.repeat);
+
                             }
                             
                         }else {
                             if success_count > 0{
-                                println!("{}: Worked", p_with_scheme);
+                                msg = format!("{}: Worked", p_with_scheme);
                             }
                         }
+                        if args.location{
+                            if success_count > 0{
+                                if let Ok(proxy_loc) = get_ip_location(&get_url_without_port(&get_url_without_scheme(&p))).await{
+                                    if proxy_loc != ""{
+                                        msg.push_str(&format!(" | {}",&proxy_loc));
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if msg != ""{
+                        println!("{}", msg);
                     }
                 }
             }
         })
-    }).collect::<Vec<_>>();
+    }).collect();
 
     for task in tasks {
         task.await.unwrap();
